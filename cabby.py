@@ -438,24 +438,13 @@ class CabbyAgent(AgentBase):
         # 4. CONFIRM BOOKING
         @self.tool(
             name="confirm_booking",
-            description="Confirm and create the trip booking. Sends an SMS confirmation to the caller.",
+            description="Confirm and create the trip booking. Sends an SMS confirmation to the caller. "
+                        "No parameters needed — all trip data comes from booking_state.",
             fillers={"en-US": ["Booking your ride now.", "Let me confirm that for you.", "One moment while I finalize your booking."]},
             parameters={
                 "type": "object",
-                "properties": {
-                    "pickup_address": {"type": "string", "description": "Pickup address"},
-                    "pickup_lat": {"type": "number", "description": "Pickup latitude"},
-                    "pickup_lng": {"type": "number", "description": "Pickup longitude"},
-                    "destination_address": {"type": "string", "description": "Destination address"},
-                    "destination_lat": {"type": "number", "description": "Destination latitude"},
-                    "destination_lng": {"type": "number", "description": "Destination longitude"},
-                    "distance_meters": {"type": "integer", "description": "Trip distance in meters"},
-                    "duration_seconds": {"type": "integer", "description": "Trip duration in seconds"},
-                    "fare_estimate": {"type": "number", "description": "Estimated fare"}
-                },
-                "required": ["pickup_address", "pickup_lat", "pickup_lng",
-                             "destination_address", "destination_lat", "destination_lng",
-                             "distance_meters", "duration_seconds", "fare_estimate"]
+                "properties": {},
+                "required": []
             }
         )
         def confirm_booking(args, raw_data):

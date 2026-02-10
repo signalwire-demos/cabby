@@ -73,16 +73,16 @@ class Database:
             return dict(row) if row else None
 
     def create_customer(self, phone, name):
-        """Register a new customer."""
+        """Register a new customer, or update the name if the phone already exists."""
         with self._connect() as conn:
-            cursor = conn.execute(
-                "INSERT INTO customers (phone, name) VALUES (?, ?)",
+            conn.execute(
+                "INSERT INTO customers (phone, name) VALUES (?, ?) "
+                "ON CONFLICT(phone) DO UPDATE SET name = excluded.name",
                 (phone, name)
             )
             conn.commit()
-            customer_id = cursor.lastrowid
             row = conn.execute(
-                "SELECT * FROM customers WHERE id = ?", (customer_id,)
+                "SELECT * FROM customers WHERE phone = ?", (phone,)
             ).fetchone()
             return dict(row) if row else None
 

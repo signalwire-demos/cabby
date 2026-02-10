@@ -84,7 +84,7 @@ class CabbyAgent(AgentBase):
         greeting.add_bullets("Process", [
             "Introduce yourself: 'Hi, I'm Cabby, your AI taxi dispatcher!'",
             "Check is_new_caller: ${global_data.is_new_caller}",
-            "NEW CALLER (is_new_caller is true): Ask for their name, then call register_customer",
+            "NEW CALLER (is_new_caller is true): Ask 'What's your name?' and WAIT for the caller to respond. Only after the caller tells you their name, call register_customer with the name they said.",
             "RETURNING CALLER (is_new_caller is false): Greet them by name, then ask what they need",
             "If you can see a Pending Trip section above: mention their pending ride and ask if they want to keep or cancel it",
             "If you can see a Recent Trips section above: offer to rebook or reverse their last trip",
@@ -98,6 +98,7 @@ class CabbyAgent(AgentBase):
             "Do NOT offer rebook or reverse if there is no Recent Trips section above",
             "Do NOT mention pending trips if there is no Pending Trip section above",
             "Do NOT ask for addresses here — get_pickup handles that",
+            "Do NOT call register_customer until the caller has actually said their name",
             "Do NOT list every option — just ask what they need",
         ])
         greeting.set_step_criteria("Caller's intent is determined")
@@ -256,11 +257,25 @@ class CabbyAgent(AgentBase):
         def register_customer(args, raw_data):
             global_data = raw_data.get('global_data', {})
             caller_phone = global_data.get('caller_phone', '')
-            name = args["name"]
+            name = args.get("name", "").strip()
 
-            customer = db.create_customer(caller_phone, name)
+            if not name:
+                return SwaigFunctionResult(
+                    "I didn't catch the name. Ask the caller for their name again, "
+                    "then call register_customer with the name."
+                )
+
+            try:
+                customer = db.create_customer(caller_phone, name)
+            except Exception as e:
+                logger.error(f"register_customer DB error: {e}")
+                customer = None
+
             if not customer:
-                return SwaigFunctionResult("Sorry, I had trouble registering you. Let's try again.")
+                return SwaigFunctionResult(
+                    "I had trouble with registration. Ask the caller for their name again "
+                    "and call register_customer once more."
+                )
 
             global_data['customer'] = {
                 "id": customer["id"],
@@ -896,8 +911,8 @@ class CabbyAgent(AgentBase):
                 }
             })
             agent.prompt_add_section("New Caller",
-                f"This is a new caller from {caller_phone}. Welcome them to Cabby and ask for their name "
-                "so you can register them with register_customer before booking a ride."
+                f"This is a new caller from {caller_phone}. Welcome them to Cabby and ask for their name. "
+                "WAIT for the caller to say their name before calling register_customer."
             )
 
     def _render_swml(self, call_id=None, modifications=None):

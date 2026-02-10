@@ -109,8 +109,9 @@ class CabbyAgent(AgentBase):
             "  If saved, call validate_address with the saved address text and address_type='pickup'",
             "Otherwise ask: 'Where would you like to be picked up?'",
             "For any address or business name, call validate_address with address_type='pickup'",
-            "validate_address will automatically advance to get_destination when successful",
-            "If validation fails, ask for a more specific address and call validate_address again"
+            "After validate_address returns, read the address back to the caller and ask them to confirm",
+            "If they confirm: move to get_destination",
+            "If they say it's wrong: ask for a corrected address and call validate_address again"
         ])
         get_pickup.set_step_criteria("Pickup address validated and stored in booking_state")
         get_pickup.set_functions(["validate_address"])
@@ -126,8 +127,9 @@ class CabbyAgent(AgentBase):
             "  If saved, call validate_address with the saved address text and address_type='destination'",
             "Otherwise ask: 'And where are you headed?'",
             "For any address or business name, call validate_address with address_type='destination'",
-            "validate_address will automatically advance to confirm_fare when successful",
-            "If validation fails, ask for a more specific address and call validate_address again"
+            "After validate_address returns, read the address back to the caller and ask them to confirm",
+            "If they confirm: move to confirm_fare",
+            "If they say it's wrong: ask for a corrected address and call validate_address again"
         ])
         get_destination.set_step_criteria("Destination address validated and stored in booking_state")
         get_destination.set_functions(["validate_address"])
@@ -256,7 +258,8 @@ class CabbyAgent(AgentBase):
                 "work_lng": None,
             }
             global_data['is_new_caller'] = False
-            # Clean up — phone now lives in customer.phone
+            # Promote to customer_phone so post-prompt summary can find it
+            global_data['customer_phone'] = caller_phone
             global_data.pop('caller_phone', None)
 
             result = SwaigFunctionResult(f"Welcome to Cabby, {name}! You're all registered. Now let's book you a ride.")
@@ -352,16 +355,27 @@ class CabbyAgent(AgentBase):
                 "label": label
             }
 
-            result = SwaigFunctionResult(
-                f"The {address_type} address is {address}."
-            )
+            if address_type == "pickup":
+                result = SwaigFunctionResult(
+                    f"The pickup address is {address}. "
+                    f"Read this back to the caller. If they confirm it's correct, "
+                    f"move to get_destination to collect the drop-off address."
+                )
+            elif address_type == "destination":
+                result = SwaigFunctionResult(
+                    f"The destination address is {address}. "
+                    f"Read this back to the caller. If they confirm it's correct, "
+                    f"move to confirm_fare to calculate the fare."
+                )
+            else:
+                result = SwaigFunctionResult(
+                    f"The {address_type} address is {address}. "
+                    f"Read this back to the caller and confirm it's correct before continuing."
+                )
             save_booking_state(result, booking_state, global_data)
 
-            # Force step transition based on address type
-            if address_type == "pickup":
-                result.swml_change_step("get_destination")
-            elif address_type == "destination":
-                result.swml_change_step("confirm_fare")
+            # No forced step transition — AI confirms address with caller first,
+            # then moves to next step naturally via valid_steps
 
             return result
 

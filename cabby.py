@@ -53,6 +53,7 @@ class CabbyAgent(AgentBase):
             "NEVER skip calling a tool. You cannot validate an address without calling validate_address. You cannot get a fare without calling calculate_fare.",
             "ONLY reference data you can actually see in the prompt sections above. If there is no Recent Trips section, do NOT offer rebook or reverse. If there is no Pending Trip section, do NOT mention pending trips.",
             "Each step has ONE job. Do that job and nothing else. Do NOT ask about the destination during pickup. Do NOT discuss fares during address collection.",
+            "You ONLY help with booking, rebooking, reversing, or cancelling taxi rides and managing saved addresses. If the caller asks about anything else — trivia, general knowledge, chitchat, or questions unrelated to their ride — politely redirect: 'I can only help with taxi bookings. Would you like to book a ride?'",
         ])
 
         # Voice

@@ -547,11 +547,11 @@ class CabbyAgent(AgentBase):
                 f"Your ride is booked! I've sent a confirmation text to your phone."
             )
 
-            result.add_action("send_sms", {
-                "to_number": caller_phone,
-                "from_number": config.SIGNALWIRE_PHONE_NUMBER,
-                "body": sms_body
-            })
+            result.send_sms(
+                to_number=caller_phone,
+                from_number=config.SIGNALWIRE_PHONE_NUMBER,
+                body=sms_body
+            )
 
             # Update global_data with labeled addresses (matches DB and SMS)
             new_trip = {
@@ -634,11 +634,11 @@ class CabbyAgent(AgentBase):
                 f"Your trip from {pending['pickup_address']} to "
                 f"{pending['destination_address']} has been cancelled."
             )
-            result.add_action("send_sms", {
-                "to_number": caller_phone,
-                "from_number": config.SIGNALWIRE_PHONE_NUMBER,
-                "body": sms_body
-            })
+            result.send_sms(
+                to_number=caller_phone,
+                from_number=config.SIGNALWIRE_PHONE_NUMBER,
+                body=sms_body
+            )
             result.update_global_data(global_data)
             result.swml_change_step("greeting")
             return result

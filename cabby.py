@@ -16,9 +16,8 @@ from google_api import GoogleMapsClient
 
 load_dotenv()
 
-logging.basicConfig(level=logging.DEBUG, force=True)
+logging.basicConfig(level=logging.INFO, force=True)
 logger = logging.getLogger(__name__)
-logging.getLogger("google_api").setLevel(logging.DEBUG)
 
 # Initialize database and Google Maps client
 db = Database(config.DATABASE_PATH)
@@ -35,7 +34,9 @@ class CabbyAgent(AgentBase):
                          record_call=True, record_format="wav", record_stereo=True)
 
         # AI model
-        self.set_param("ai_model", "gpt-oss-120b@groq.ai")
+        self.set_param("ai_model", config.AI_MODEL)
+        self.set_param("top_p", config.AI_TOP_P)
+        self.set_param("temperature", config.AI_TEMPERATURE)
 
         # Personality
         self.prompt_add_section("Personality",
@@ -45,7 +46,7 @@ class CabbyAgent(AgentBase):
         )
 
         # Voice
-        self.add_language("English", "en-US", "elevenlabs.adam")
+        self.add_language("English", "en-US", "azure.en-US-CoraMultilingualNeural")
         self.add_hints(["Cabby", "rebook", "reverse", "cancel", "pickup",
                         "destination", "fare", "home", "work"])
 
@@ -481,23 +482,23 @@ class CabbyAgent(AgentBase):
             duration_seconds = bs_route.get("duration_seconds", 0)
             fare_estimate = bs_route.get("fare_estimate", 0)
 
-            # Apply labels for display (SMS, trip record) — labels stored separately by validate_address
-            if pickup_label:
+            # Apply labels for display (SMS, trip record) — skip if address already starts with the label
+            if pickup_label and not pickup_address.startswith(pickup_label):
                 pickup_display = f"{pickup_label}, {pickup_address}"
             else:
                 pickup_display = pickup_address
-            if dest_label:
+            if dest_label and not dest_address.startswith(dest_label):
                 dest_display = f"{dest_label}, {dest_address}"
             else:
                 dest_display = dest_address
 
-            # DB stores clean addresses (no labels); display uses labeled versions
+            # Store labeled addresses so dashboard shows labels (e.g. "Home, 714 E Osage...")
             trip = db.create_trip(
                 customer_id=customer["id"],
-                pickup_address=pickup_address,
+                pickup_address=pickup_display,
                 pickup_lat=pickup_lat,
                 pickup_lng=pickup_lng,
-                destination_address=dest_address,
+                destination_address=dest_display,
                 destination_lat=dest_lat,
                 destination_lng=dest_lng,
                 distance_meters=distance_meters,
@@ -532,13 +533,13 @@ class CabbyAgent(AgentBase):
                 "body": sms_body
             })
 
-            # Update global_data — clean addresses for rebook, labeled for pending display
+            # Update global_data with labeled addresses (matches DB and SMS)
             new_trip = {
                 "id": trip["id"],
-                "pickup_address": pickup_address,
+                "pickup_address": pickup_display,
                 "pickup_lat": pickup_lat,
                 "pickup_lng": pickup_lng,
-                "destination_address": dest_address,
+                "destination_address": dest_display,
                 "destination_lat": dest_lat,
                 "destination_lng": dest_lng,
                 "fare_estimate": fare_estimate,
@@ -737,7 +738,7 @@ class CabbyAgent(AgentBase):
                     "phone": phone
                 },
                 "summary": args.get('summary', 'N/A'),
-                "trip": None,
+                "trip": {},
                 "booking": None,
                 "saved_addresses": {}
             }

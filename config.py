@@ -26,6 +26,11 @@ PER_MINUTE_RATE = float(os.getenv("PER_MINUTE_RATE", "0.30"))
 MINIMUM_FARE = float(os.getenv("MINIMUM_FARE", "8.00"))
 MAX_DISTANCE_MILES = float(os.getenv("MAX_DISTANCE_MILES", "100"))
 
+# AI Model
+AI_MODEL = os.getenv("AI_MODEL", "gpt-oss-120b@groq.ai")
+AI_TOP_P = float(os.getenv("AI_TOP_P", "0.5"))
+AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "0.5"))
+
 # Server
 HOST = os.getenv("HOST", "0.0.0.0")
 PORT = int(os.getenv("PORT", "3000"))

@@ -1,0 +1,13 @@
+name: Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+
+jobs:
+  preview:
+    uses: signalwire-demos/dokku-deploy-system/.github/workflows/preview.yml@main
+    secrets: inherit

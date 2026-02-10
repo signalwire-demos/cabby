@@ -1,0 +1,69 @@
+{
+  "name": "cabby",
+  "description": "Cabby - AI-powered taxi booking agent with SignalWire",
+  "keywords": ["signalwire", "ai", "agent", "taxi", "booking", "python"],
+  "env": {
+    "SIGNALWIRE_PHONE_NUMBER": {
+      "description": "SignalWire phone number for Cabby",
+      "required": true
+    },
+    "GOOGLE_MAPS_API_KEY": {
+      "description": "Google Maps API key for address validation and routing",
+      "required": true
+    },
+    "SWML_PROXY_URL_BASE": {
+      "description": "Public URL base for SWML callbacks (e.g., 'https://cabby.example.com')",
+      "required": true
+    },
+    "SWML_BASIC_AUTH_USER": {
+      "description": "Basic auth username for SWML endpoints (optional, auto-generated if not set)",
+      "required": false
+    },
+    "SWML_BASIC_AUTH_PASSWORD": {
+      "description": "Basic auth password for SWML endpoints (optional, auto-generated if not set)",
+      "required": false
+    },
+    "DISPLAY_PHONE_NUMBER": {
+      "description": "Formatted phone number for dashboard display (optional)",
+      "required": false
+    },
+    "AI_MODEL": {
+      "description": "AI model to use",
+      "value": "gpt-oss-120b@groq.ai"
+    },
+    "AI_TOP_P": {
+      "description": "Top-p sampling parameter",
+      "value": "0.5"
+    },
+    "AI_TEMPERATURE": {
+      "description": "Temperature sampling parameter",
+      "value": "0.5"
+    },
+    "PORT": {
+      "description": "Server port",
+      "value": "3000"
+    }
+  },
+  "formation": {
+    "web": {
+      "quantity": 1
+    }
+  },
+  "buildpacks": [
+    {
+      "url": "heroku/python"
+    }
+  ],
+  "healthchecks": {
+    "web": [
+      {
+        "type": "startup",
+        "name": "port listening",
+        "listening": true,
+        "attempts": 10,
+        "wait": 5,
+        "timeout": 60
+      }
+    ]
+  }
+}

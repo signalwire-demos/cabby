@@ -35,8 +35,7 @@ class CabbyAgent(AgentBase):
 
         # AI model
         self.set_param("ai_model", config.AI_MODEL)
-        self.set_param("top_p", config.AI_TOP_P)
-        self.set_param("temperature", config.AI_TEMPERATURE)
+        self.set_prompt_llm_params(top_p=config.AI_TOP_P, temperature=config.AI_TEMPERATURE)
 
         # Personality
         self.prompt_add_section("Personality",

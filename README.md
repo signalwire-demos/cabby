@@ -21,11 +21,9 @@ Caller --> SignalWire --> cabby.py (AgentServer + CabbyAgent)
 
 ## State Machine
 
-Cabby uses a **Contexts & Steps** state machine to control conversation flow. SWAIG tool results drive all step transitions via `swml_change_step()` -- the AI never decides when to move between steps.
+Cabby uses a **Contexts & Steps** state machine to control conversation flow. Most step transitions are forced by SWAIG tool results via `swml_change_step()`. For address validation, the AI confirms the address with the caller before advancing via `valid_steps`.
 
 ### Flow Diagram
-
-All step transitions are forced by SWAIG tool results via `swml_change_step()`. The AI never decides when to change steps — tools drive the flow.
 
 ```
                                INCOMING CALL
@@ -62,7 +60,9 @@ All step transitions are forced by SWAIG tool results via `swml_change_step()`. 
 │  Reverse: uses last trip's DESTINATION as pickup             │       │
 │  Home/work: uses saved address                               │       │
 │                                                              │       │
-│  validate_address(type=pickup) ──── forced ──> GET_DESTINATION       │
+│  validate_address(type=pickup)                               │       │
+│  AI reads back address → caller confirms → GET_DESTINATION   │       │
+│  If wrong → ask again → re-validate                          │       │
 └──────────────────────────────────────────────────────────────┘       │
                               │                                        │
                               v                                        │
@@ -77,7 +77,9 @@ All step transitions are forced by SWAIG tool results via `swml_change_step()`. 
 │  Home/work: uses saved address                               │       │
 │  Destination search biased toward pickup location            │       │
 │                                                              │       │
-│  validate_address(type=destination) ── forced ──> CONFIRM_FARE       │
+│  validate_address(type=destination)                          │       │
+│  AI reads back address → caller confirms → CONFIRM_FARE      │       │
+│  If wrong → ask again → re-validate                          │       │
 └──────────────────────────────────────────────────────────────┘       │
                               │                                        │
                               v                                        │
@@ -154,20 +156,18 @@ All step transitions are forced by SWAIG tool results via `swml_change_step()`. 
 
 ### Transition Summary
 
-Every forced transition at a glance:
-
-| Tool | Forced Transition |
-|------|-------------------|
-| `register_customer` | → `get_pickup` |
-| `validate_address(type=pickup)` | → `get_destination` |
-| `validate_address(type=destination)` | → `confirm_fare` |
-| `validate_address(type=update)` | *(none — stays in update_address)* |
-| `calculate_fare` | *(none — stays in confirm_fare)* |
-| `confirm_booking` (both addresses saved) | → `wrap_up` |
-| `confirm_booking` (missing home or work) | → `offer_save_address` |
-| `cancel_booking` | → `greeting` |
-| `save_address` (from update flow) | → `greeting` |
-| `save_address` (from booking flow) | → `wrap_up` |
+| Tool | Transition | Type |
+|------|-----------|------|
+| `register_customer` | → `get_pickup` | Forced |
+| `validate_address(type=pickup)` | → `get_destination` | AI-driven (after caller confirms) |
+| `validate_address(type=destination)` | → `confirm_fare` | AI-driven (after caller confirms) |
+| `validate_address(type=update)` | *(none — stays in update_address)* | — |
+| `calculate_fare` | *(none — stays in confirm_fare)* | — |
+| `confirm_booking` (both addresses saved) | → `wrap_up` | Forced |
+| `confirm_booking` (missing home or work) | → `offer_save_address` | Forced |
+| `cancel_booking` | → `greeting` | Forced |
+| `save_address` (from update flow) | → `greeting` | Forced |
+| `save_address` (from booking flow) | → `wrap_up` | Forced |
 
 ### Step Reference
 
@@ -197,7 +197,8 @@ Every forced transition at a glance:
 **Behavior:**
 - For rebook: uses pickup from last trip. For reverse: uses destination from last trip as pickup
 - "home"/"work" uses saved address
-- All addresses go through `validate_address` (forced transition to `get_destination`)
+- All addresses go through `validate_address`
+- AI reads back the address and waits for caller confirmation before moving to `get_destination`
 
 #### `get_destination` -- Collect Drop-off Address
 
@@ -210,7 +211,8 @@ Every forced transition at a glance:
 **Behavior:**
 - For rebook: uses destination from last trip. For reverse: uses pickup from last trip as destination
 - Destination search is biased toward pickup location
-- All addresses go through `validate_address` (forced transition to `confirm_fare`)
+- All addresses go through `validate_address`
+- AI reads back the address and waits for caller confirmation before moving to `confirm_fare`
 
 #### `confirm_fare` -- Calculate & Confirm
 
@@ -275,16 +277,15 @@ Every forced transition at a glance:
 
 ## SWAIG Tools
 
-All step transitions are forced by tool results via `swml_change_step()`.
-
 | # | Tool | Parameters | Transition | Description |
 |---|------|-----------|------------|-------------|
-| 1 | `register_customer` | `name` | → `get_pickup` | Register new caller in DB + global_data |
-| 2 | `validate_address` | `address`, `address_type` (pickup/destination/update) | pickup→`get_destination`, destination→`confirm_fare`, update→*(none)* | Google Places lookup. Auto-detects Home/Work/business labels |
+| 1 | `register_customer` | `name` | → `get_pickup` (forced) | Register new caller in DB + global_data |
+| 2 | `validate_address` | `address`, `address_type` (pickup/destination/update) | pickup/destination: AI-driven after confirmation. update: *(none)* | Google Places lookup. Auto-detects Home/Work/business labels |
 | 3 | `calculate_fare` | *(none -- reads from booking_state)* | *(none)* | Google Routes API. Fare = `max(BASE + miles*RATE + min*RATE, MINIMUM)`. Rejects trips over MAX_DISTANCE_MILES |
-| 4 | `confirm_booking` | *(reads from booking_state)* | → `wrap_up` or `offer_save_address` | Creates trip in DB, sends SMS. Routes based on whether saved addresses are complete |
-| 5 | `cancel_booking` | *(none -- uses pending_trip from global_data)* | → `greeting` | Cancels trip in DB, sends SMS, returns to greeting for new options |
-| 6 | `save_address` | `address_type` (home/work) | → `greeting` (update flow) or `wrap_up` (booking flow) | Pulls address from `validated_address` or `booking_state`. No lat/lng params needed |
+| 4 | `confirm_booking` | *(reads from booking_state)* | → `wrap_up` or `offer_save_address` (forced) | Creates trip in DB, sends SMS. Routes based on whether saved addresses are complete |
+| 5 | `cancel_booking` | *(none -- uses pending_trip from global_data)* | → `greeting` (forced) | Cancels trip in DB, sends SMS, returns to greeting for new options |
+| 6 | `save_address` | `address_type` (home/work) | → `greeting` (update flow) or `wrap_up` (booking flow) (forced) | Pulls address from `validated_address` or `booking_state`. No lat/lng params needed |
+| 7 | `summarize_conversation` | `summary` | *(none -- end of call)* | Auto-called on hangup. Reads global_data and returns structured JSON summary |
 
 ## Address Labels
 
@@ -293,7 +294,7 @@ Labels (Home, Work, business names) are handled automatically:
 - **Home/Work**: `validate_address` compares the validated result against saved `home_address`/`work_address` in the customer record
 - **Business names**: Google Places returns `business_name` for POIs (e.g. "Walmart Supercenter", "Alamo Liquor")
 - **Labels are stored separately** in `booking_state.pickup.label` / `booking_state.destination.label`
-- **DB stores clean addresses** (no labels). Labels are only applied for display in SMS and pending trip info
+- **DB stores labeled addresses** (e.g. "Home, 714 E Osage Ave, McAlester, OK 74501, USA"). Labels are prepended for display in the DB, SMS, and dashboard. Duplicate labels are prevented when the address already starts with the business name
 
 ## SMS Templates
 
@@ -375,7 +376,7 @@ The dynamic config callback looks up the caller *before the AI speaks*:
 
 **Returning caller** -- loads into `global_data`:
 - `customer` -- id, name, phone, home/work addresses with coordinates
-- `customer_name`, `customer_phone` -- top-level scalars for POM expansion
+- `customer_name`, `customer_phone` -- top-level scalars for prompt expansion
 - `recent_trips` -- last 5 trips (only if any exist)
 - `pending_trip` -- current active booking (only if one exists)
 - `booking_state` -- pickup/destination/route (initially null)
@@ -411,8 +412,8 @@ global_data = {
 ```
 Call in → _per_call_config (not found, is_new_caller=true)
 → [greeting] "Hi, I'm Cabby! What's your name?" → register_customer("Sarah") → forced to get_pickup
-→ [get_pickup] validate_address(type=pickup) → forced to get_destination
-→ [get_destination] validate_address(type=destination) → forced to confirm_fare
+→ [get_pickup] validate_address(type=pickup) → AI reads back → caller confirms → get_destination
+→ [get_destination] validate_address(type=destination) → AI reads back → caller confirms → confirm_fare
 → [confirm_fare] calculate_fare → "$32.50, 22 min" → confirm_booking + SMS
 → [offer_save_address] "Save as home or work?" → save_address → forced to wrap_up
 → [wrap_up] "Have a great ride!"
@@ -422,8 +423,8 @@ Call in → _per_call_config (not found, is_new_caller=true)
 ```
 Call in → _per_call_config (found Sarah, home + work loaded)
 → [greeting] "Hi Sarah! Want a ride from home to work?"
-→ [get_pickup] validate_address(home address) → forced to get_destination
-→ [get_destination] validate_address(work address) → forced to confirm_fare
+→ [get_pickup] validate_address(home address) → AI reads back → confirms → get_destination
+→ [get_destination] validate_address(work address) → AI reads back → confirms → confirm_fare
 → [confirm_fare] calculate_fare → "$18.50, 15 min" → confirm_booking + SMS
 → forced to wrap_up (both addresses saved)
 ```
@@ -432,16 +433,16 @@ Call in → _per_call_config (found Sarah, home + work loaded)
 ```
 Call in → _per_call_config (found, recent_trips loaded)
 → [greeting] "Rebook my last trip" → move to get_pickup
-→ [get_pickup] validate_address(last trip's pickup) → forced to get_destination
-→ [get_destination] validate_address(last trip's destination) → forced to confirm_fare
+→ [get_pickup] validate_address(last trip's pickup) → AI reads back → confirms → get_destination
+→ [get_destination] validate_address(last trip's destination) → AI reads back → confirms → confirm_fare
 → [confirm_fare] calculate_fare → confirm_booking + SMS → wrap_up
 ```
 
 ### Reverse Trip
 ```
 → [greeting] "I need a ride back" → move to get_pickup
-→ [get_pickup] validate_address(last trip's DESTINATION as pickup) → forced to get_destination
-→ [get_destination] validate_address(last trip's PICKUP as destination) → forced to confirm_fare
+→ [get_pickup] validate_address(last trip's DESTINATION as pickup) → AI reads back → confirms → get_destination
+→ [get_destination] validate_address(last trip's PICKUP as destination) → AI reads back → confirms → confirm_fare
 → [confirm_fare] calculate_fare → confirm_booking + SMS → wrap_up
 ```
 
@@ -459,11 +460,27 @@ Call in → _per_call_config (found, recent_trips loaded)
 → [greeting] "Anything else?"
 ```
 
-## Call Recording & Logging
+## Call Summary
 
-- All calls are recorded in WAV stereo format (`record_call=True`)
-- SWML is dumped to stderr on every request via `_render_swml` override
-- Post-prompt summaries are logged and full call JSON is saved to `calls/{call_id}.json`
+When a call ends, the `summarize_conversation` SWAIG tool is automatically invoked. It reads `global_data` programmatically and returns a structured JSON summary:
+
+```json
+{
+  "customer": {"name": "Sarah", "phone": "+15551234567"},
+  "summary": "Caller booked a ride from home to Walmart.",
+  "trip": {
+    "pickup": {"address": "714 E Osage Ave...", "label": "Home"},
+    "destination": {"address": "2401 S George Nigh Expy...", "label": "Walmart Supercenter"},
+    "fare": 12.50,
+    "distance_miles": 3.2,
+    "duration_minutes": 8
+  },
+  "booking": {"status": "confirmed", "trip_id": 42},
+  "saved_addresses": {"home": "714 E Osage Ave...", "work": "100 E Carl Albert Pkwy..."}
+}
+```
+
+Full call data (including raw SWML payloads) is saved to `calls/{call_id}.json`.
 
 ## Database Schema
 
@@ -484,9 +501,9 @@ Call in → _per_call_config (found, recent_trips loaded)
 |--------|------|-------------|
 | id | INTEGER PK | Auto-increment |
 | customer_id | INTEGER FK | References customers.id |
-| pickup_address | TEXT | Pickup location (clean, no labels) |
+| pickup_address | TEXT | Pickup location (with label prefix if applicable) |
 | pickup_lat, pickup_lng | REAL | Pickup coordinates |
-| destination_address | TEXT | Drop-off location (clean, no labels) |
+| destination_address | TEXT | Drop-off location (with label prefix if applicable) |
 | destination_lat, destination_lng | REAL | Drop-off coordinates |
 | distance_meters | INTEGER | Route distance |
 | duration_seconds | INTEGER | Route duration |
@@ -498,13 +515,19 @@ Call in → _per_call_config (found, recent_trips loaded)
 
 ```
 taxibooking/
-├── cabby.py            # CabbyAgent: state machine, 6 SWAIG tools, dynamic config, entry point
+├── cabby.py            # CabbyAgent: state machine, 7 SWAIG tools, dynamic config, entry point
 ├── database.py         # SQLite: schema init, all CRUD operations
 ├── google_api.py       # Google Places + Routes API client, spoken number normalization
 ├── config.py           # Env var loader with defaults and validation
-├── requirements.txt    # signalwire-agents, requests, python-dotenv
+├── requirements.txt    # signalwire-agents, requests, python-dotenv, gunicorn, uvicorn
 ├── .env.example        # Credential template
-├── calls/              # Post-prompt call data saved as {call_id}.json
+├── Procfile            # Gunicorn with uvicorn worker for Dokku/Heroku deployment
+├── CHECKS              # Dokku zero-downtime deploy health check
+├── app.json            # Dokku/Heroku app manifest with env var definitions
+├── .github/workflows/
+│   ├── deploy.yml      # Auto-deploy on push to main/staging/develop
+│   └── preview.yml     # PR preview deployments
+├── calls/              # Post-call data saved as {call_id}.json
 └── web/
     ├── index.html      # Booking dashboard (auto-refreshes)
     └── img/
@@ -521,11 +544,15 @@ pip install -r requirements.txt
 cp .env.example .env
 # Fill in: SIGNALWIRE_*, GOOGLE_MAPS_API_KEY, DISPLAY_PHONE_NUMBER
 
-# Run
+# Run locally
 python cabby.py
 ```
 
 The server prints the full SWML endpoint URL (with auth) on startup. Point your SignalWire phone number's SWML webhook to that URL.
+
+### Dokku / Heroku Deployment
+
+The repo includes `Procfile`, `CHECKS`, and `app.json` for Dokku or Heroku. GitHub Actions workflows in `.github/workflows/` auto-deploy on push to `main`, `staging`, or `develop`, and create preview apps for pull requests via [dokku-deploy-system](https://github.com/signalwire-demos/dokku-deploy-system).
 
 ## Configuration
 
@@ -540,6 +567,9 @@ The server prints the full SWML endpoint URL (with auth) on startup. Point your 
 | `SWML_BASIC_AUTH_PASSWORD` | Basic auth password for SWML endpoint | |
 | `SWML_PROXY_URL_BASE` | Public URL base if behind proxy/ngrok | |
 | `GOOGLE_MAPS_API_KEY` | Google Maps API key (Places + Routes) | |
+| `AI_MODEL` | AI model identifier | `gpt-oss-120b@groq.ai` |
+| `AI_TOP_P` | Top-p sampling parameter | `0.5` |
+| `AI_TEMPERATURE` | Temperature sampling parameter | `0.5` |
 | `BASE_FARE` | Base fare amount | 3.00 |
 | `PER_MILE_RATE` | Rate per mile | 2.40 |
 | `PER_MINUTE_RATE` | Rate per minute | 0.30 |

@@ -548,8 +548,8 @@ class CabbyAgent(AgentBase):
             )
 
             result.add_action("send_sms", {
-                "to": caller_phone,
-                "from": config.SIGNALWIRE_PHONE_NUMBER,
+                "to_number": caller_phone,
+                "from_number": config.SIGNALWIRE_PHONE_NUMBER,
                 "body": sms_body
             })
 
@@ -635,8 +635,8 @@ class CabbyAgent(AgentBase):
                 f"{pending['destination_address']} has been cancelled."
             )
             result.add_action("send_sms", {
-                "to": caller_phone,
-                "from": config.SIGNALWIRE_PHONE_NUMBER,
+                "to_number": caller_phone,
+                "from_number": config.SIGNALWIRE_PHONE_NUMBER,
                 "body": sms_body
             })
             result.update_global_data(global_data)

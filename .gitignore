@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.pyc
+.env
+.env~
+cabby.db
+cabby.db-wal
+cabby.db-shm
+calls/
+.DS_Store

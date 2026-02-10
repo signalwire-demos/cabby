@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cabby - AI Taxi Dispatcher Dashboard</title>
+
+    <!-- Open Graph Meta Tags -->
+    <meta property="og:title" content="Cabby - AI Taxi Dispatcher">
+    <meta property="og:description" content="Voice-powered AI taxi booking. Call in to book rides, rebook trips, and manage your bookings with Cabby.">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="/img/logo.png">
+    <meta property="og:image:width" content="1200">
+    <meta property="og:image:height" content="630">
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Cabby - AI Taxi Dispatcher">
+    <meta name="twitter:description" content="Voice-powered AI taxi booking. Call in to book rides, rebook trips, and manage your bookings with Cabby.">
+    <meta name="twitter:image" content="/img/logo.png">
+
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="/img/logo.png">
+    <link rel="apple-touch-icon" href="/img/logo.png">
+
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #0f1117;
+            color: #e0e0e0;
+            min-height: 100vh;
+        }
+
+        header {
+            background: linear-gradient(135deg, #1a1d2e 0%, #252940 100%);
+            border-bottom: 3px solid #f5c518;
+            padding: 16px 30px;
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        header img {
+            height: 80px;
+            width: auto;
+        }
+
+        .header-spacer { flex: 1; }
+
+        .phone-link {
+            background: rgba(245, 197, 24, 0.12);
+            border: 1px solid #f5c518;
+            color: #f5c518;
+            padding: 10px 22px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 1.1rem;
+            white-space: nowrap;
+            transition: all 0.2s;
+        }
+
+        .phone-link:hover {
+            background: #f5c518;
+            color: #0f1117;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+        }
+
+        .stat-card {
+            background: #1a1d2e;
+            border-radius: 12px;
+            padding: 20px;
+            border: 1px solid #2a2e42;
+        }
+
+        .stat-card .label {
+            font-size: 0.8rem;
+            color: #8a8fa8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        .stat-card .value {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-top: 4px;
+        }
+
+        .stat-card .value.pending { color: #f5c518; }
+        .stat-card .value.confirmed { color: #4caf50; }
+        .stat-card .value.completed { color: #64b5f6; }
+        .stat-card .value.cancelled { color: #ef5350; }
+        .stat-card .value.revenue { color: #f5c518; }
+
+        .toolbar {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 16px;
+            flex-wrap: wrap;
+            gap: 12px;
+        }
+
+        .toolbar h2 {
+            font-size: 1.2rem;
+            color: #ccc;
+        }
+
+        .filters {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .filter-btn {
+            background: #1a1d2e;
+            color: #8a8fa8;
+            border: 1px solid #2a2e42;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .filter-btn:hover { border-color: #f5c518; color: #f5c518; }
+        .filter-btn.active { background: #f5c518; color: #0f1117; border-color: #f5c518; font-weight: 600; }
+
+        .refresh-btn {
+            background: #252940;
+            color: #8a8fa8;
+            border: 1px solid #2a2e42;
+            padding: 6px 14px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .refresh-btn:hover { border-color: #f5c518; color: #f5c518; }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #1a1d2e;
+            border-radius: 12px;
+            overflow: hidden;
+        }
+
+        thead th {
+            background: #252940;
+            padding: 12px 16px;
+            text-align: left;
+            font-size: 0.8rem;
+            color: #8a8fa8;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            border-bottom: 1px solid #2a2e42;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #1e2235;
+            transition: background 0.15s;
+        }
+
+        tbody tr:hover { background: #20243a; }
+        tbody tr:last-child { border-bottom: none; }
+
+        tbody td {
+            padding: 14px 16px;
+            font-size: 0.9rem;
+            vertical-align: top;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 12px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .badge.pending { background: rgba(245, 197, 24, 0.15); color: #f5c518; }
+        .badge.confirmed { background: rgba(76, 175, 80, 0.15); color: #4caf50; }
+        .badge.completed { background: rgba(100, 181, 246, 0.15); color: #64b5f6; }
+        .badge.cancelled { background: rgba(239, 83, 80, 0.15); color: #ef5350; }
+
+        .addr { max-width: 220px; }
+        .addr-from, .addr-to { display: block; line-height: 1.4; }
+        .addr-from::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #4caf50; margin-right: 6px; }
+        .addr-to::before { content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #ef5350; margin-right: 6px; }
+
+        .fare { font-weight: 600; color: #f5c518; }
+        .time-ago { color: #666; font-size: 0.8rem; }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #555;
+        }
+
+        .empty-state p { font-size: 1.1rem; margin-bottom: 8px; }
+        .empty-state small { font-size: 0.85rem; }
+
+        .table-wrap {
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            border-radius: 12px;
+            border: 1px solid #2a2e42;
+        }
+
+        .table-wrap table {
+            border: none;
+            border-radius: 0;
+        }
+
+        @media (max-width: 768px) {
+            .container { padding: 12px; }
+            header { padding: 12px 16px; gap: 12px; }
+            header img { height: 48px; }
+            .phone-link { font-size: 0.85rem; padding: 6px 12px; }
+            .stats { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+            .stat-card { padding: 14px; }
+            .stat-card .value { font-size: 1.4rem; }
+            .stat-card .label { font-size: 0.7rem; }
+            .toolbar h2 { font-size: 1rem; }
+            .filter-btn, .refresh-btn { font-size: 0.75rem; padding: 5px 10px; }
+            table { font-size: 0.8rem; min-width: 600px; }
+            thead th, tbody td { padding: 10px 8px; white-space: nowrap; }
+            .addr { max-width: 200px; }
+            .addr-from, .addr-to { white-space: normal; }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <img src="/img/logo.png" alt="Cabby">
+        <div class="header-spacer"></div>
+        <a href="#" class="phone-link" id="phone-link" style="display:none"></a>
+    </header>
+
+    <div class="container">
+        <div class="stats">
+            <div class="stat-card"><span class="label">Pending</span><div class="value pending" id="stat-pending">0</div></div>
+            <div class="stat-card"><span class="label">Confirmed</span><div class="value confirmed" id="stat-confirmed">0</div></div>
+            <div class="stat-card"><span class="label">Completed</span><div class="value completed" id="stat-completed">0</div></div>
+            <div class="stat-card"><span class="label">Cancelled</span><div class="value cancelled" id="stat-cancelled">0</div></div>
+            <div class="stat-card"><span class="label">Total Revenue</span><div class="value revenue" id="stat-revenue">$0</div></div>
+        </div>
+
+        <div class="toolbar">
+            <h2>Bookings</h2>
+            <div class="filters">
+                <button class="filter-btn active" data-filter="all">All</button>
+                <button class="filter-btn" data-filter="pending">Pending</button>
+                <button class="filter-btn" data-filter="confirmed">Confirmed</button>
+                <button class="filter-btn" data-filter="completed">Completed</button>
+                <button class="filter-btn" data-filter="cancelled">Cancelled</button>
+                <button class="refresh-btn" id="refresh-btn">Refresh</button>
+            </div>
+        </div>
+
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>#</th>
+                        <th>Customer</th>
+                        <th>Route</th>
+                        <th>Fare</th>
+                        <th>ETA</th>
+                        <th>Status</th>
+                        <th>Booked</th>
+                    </tr>
+                </thead>
+                <tbody id="bookings-body">
+                    <tr><td colspan="7" class="empty-state"><p>Loading bookings...</p></td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let allBookings = [];
+        let currentFilter = 'all';
+
+        async function fetchBookings() {
+            try {
+                const resp = await fetch('/api/bookings');
+                const data = await resp.json();
+                allBookings = data.bookings || [];
+                updateStats();
+                renderTable();
+            } catch (e) {
+                document.getElementById('bookings-body').innerHTML =
+                    '<tr><td colspan="7" class="empty-state"><p>Failed to load bookings</p><small>' + e.message + '</small></td></tr>';
+            }
+        }
+
+        function updateStats() {
+            const counts = { pending: 0, confirmed: 0, completed: 0, cancelled: 0 };
+            let revenue = 0;
+            allBookings.forEach(b => {
+                if (counts[b.status] !== undefined) counts[b.status]++;
+                if (b.status !== 'cancelled' && b.fare_estimate) revenue += b.fare_estimate;
+            });
+            document.getElementById('stat-pending').textContent = counts.pending;
+            document.getElementById('stat-confirmed').textContent = counts.confirmed;
+            document.getElementById('stat-completed').textContent = counts.completed;
+            document.getElementById('stat-cancelled').textContent = counts.cancelled;
+            document.getElementById('stat-revenue').textContent = '$' + revenue.toFixed(2);
+        }
+
+        function timeAgo(dateStr) {
+            const d = new Date(dateStr + 'Z');
+            const now = new Date();
+            const diff = Math.floor((now - d) / 1000);
+            if (diff < 60) return 'just now';
+            if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
+            if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
+            return Math.floor(diff / 86400) + 'd ago';
+        }
+
+        function formatDuration(seconds) {
+            if (!seconds) return '-';
+            const m = Math.round(seconds / 60);
+            return m + ' min';
+        }
+
+        function renderTable() {
+            const filtered = currentFilter === 'all'
+                ? allBookings
+                : allBookings.filter(b => b.status === currentFilter);
+
+            const tbody = document.getElementById('bookings-body');
+
+            if (filtered.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="7" class="empty-state"><p>No bookings found</p><small>Bookings made via phone calls will appear here</small></td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = filtered.map(b => `
+                <tr>
+                    <td>${b.id}</td>
+                    <td><strong>${b.customer_name}</strong><br><span class="time-ago">${b.customer_phone}</span></td>
+                    <td class="addr">
+                        <span class="addr-from">${b.pickup_address}</span>
+                        <span class="addr-to">${b.destination_address}</span>
+                    </td>
+                    <td class="fare">${b.fare_estimate ? '$' + b.fare_estimate.toFixed(2) : '-'}</td>
+                    <td>${formatDuration(b.duration_seconds)}</td>
+                    <td><span class="badge ${b.status}">${b.status}</span></td>
+                    <td><span class="time-ago">${timeAgo(b.created_at)}</span></td>
+                </tr>
+            `).join('');
+        }
+
+        // Filter buttons
+        document.querySelectorAll('.filter-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                currentFilter = btn.dataset.filter;
+                renderTable();
+            });
+        });
+
+        // Refresh
+        document.getElementById('refresh-btn').addEventListener('click', fetchBookings);
+
+        // Load phone number — display vanity name, dial the real number
+        fetch('/api/phone').then(r => r.json()).then(data => {
+            if (data.phone) {
+                const el = document.getElementById('phone-link');
+                el.href = 'tel:' + data.phone;
+                el.textContent = data.display;
+                el.style.display = '';
+            }
+        }).catch(() => {});
+
+        // Auto-refresh every 30 seconds
+        fetchBookings();
+        setInterval(fetchBookings, 30000);
+    </script>
+</body>
+</html>

@@ -49,13 +49,8 @@ class CabbyAgent(AgentBase):
         self.add_hints(["Cabby", "rebook", "reverse", "cancel", "pickup",
                         "destination", "fare", "home", "work"])
 
-        # Post-prompt summary
-        self.set_post_prompt(
-            "Summarize this call including: customer name, "
-            "caller phone number (from ${global_data.customer_phone} or ${global_data.caller_phone}), "
-            "whether a trip was booked or cancelled, pickup address, "
-            "destination address, fare estimate, and any addresses saved."
-        )
+        # Post-prompt (required so SDK emits post_prompt_url for summarize_conversation)
+        self.set_post_prompt("Summarize the conversation.")
 
         # State machine
         self._define_state_machine()
@@ -693,6 +688,95 @@ class CabbyAgent(AgentBase):
                 result.swml_change_step("wrap_up")
             return result
 
+        # 7. SUMMARIZE CONVERSATION (special name — auto-triggers SUMMARY_FUNCTION mode)
+        @self.tool(
+            name="summarize_conversation",
+            description="Generate a structured call summary. Called automatically when the conversation ends.",
+            parameters={
+                "type": "object",
+                "properties": {
+                    "summary": {
+                        "type": "string",
+                        "description": "Brief description of what happened during the call"
+                    }
+                },
+                "required": ["summary"]
+            }
+        )
+        def summarize_conversation(args, raw_data):
+            global_data = raw_data.get('global_data', {})
+            customer = global_data.get('customer') or {}
+            booking_state = global_data.get('booking_state') or {}
+            pending_trip = global_data.get('pending_trip')
+
+            # Customer info
+            name = customer.get('name', 'Unknown')
+            phone = customer.get('phone',
+                global_data.get('customer_phone',
+                    global_data.get('caller_phone', 'Unknown')))
+
+            # Pickup
+            pickup = booking_state.get('pickup') or {}
+            pickup_label = pickup.get('label', '')
+
+            # Destination
+            dest = booking_state.get('destination') or {}
+            dest_label = dest.get('label', '')
+
+            # Route / fare
+            route = booking_state.get('route') or {}
+
+            # Saved addresses
+            home_addr = customer.get('home_address')
+            work_addr = customer.get('work_address')
+
+            # Build structured JSON summary
+            summary = {
+                "customer": {
+                    "name": name,
+                    "phone": phone
+                },
+                "summary": args.get('summary', 'N/A'),
+                "trip": None,
+                "booking": None,
+                "saved_addresses": {}
+            }
+
+            if pickup.get('address'):
+                trip = summary.setdefault("trip", {})
+                trip["pickup"] = {
+                    "address": pickup['address'],
+                    "label": pickup_label or None
+                }
+
+            if dest.get('address'):
+                trip = summary.setdefault("trip", {})
+                trip["destination"] = {
+                    "address": dest['address'],
+                    "label": dest_label or None
+                }
+
+            if route.get('fare_estimate') is not None:
+                trip = summary.setdefault("trip", {})
+                trip["fare"] = route['fare_estimate']
+                if route.get('distance_meters'):
+                    trip["distance_miles"] = round(route['distance_meters'] / 1609.344, 1)
+                if route.get('duration_seconds'):
+                    trip["duration_minutes"] = int(route['duration_seconds'] / 60)
+
+            if pending_trip:
+                summary["booking"] = {
+                    "status": "confirmed",
+                    "trip_id": pending_trip.get('id')
+                }
+
+            if home_addr:
+                summary["saved_addresses"]["home"] = home_addr
+            if work_addr:
+                summary["saved_addresses"]["work"] = work_addr
+
+            return SwaigFunctionResult(json.dumps(summary))
+
     def _per_call_config(self, query_params, body_params, headers, agent):
         """Pre-populate customer data on an ephemeral agent copy.
 
@@ -763,8 +847,8 @@ class CabbyAgent(AgentBase):
 
             # Agent-level sections visible across ALL steps.
             agent.prompt_add_section("Caller",
-                f"This is a returning customer named {customer['name']}. "
-                f"Always greet them warmly by name."
+                f"This is a returning customer named {customer['name']} "
+                f"calling from {caller_phone}. Always greet them warmly by name."
             )
 
             agent.prompt_add_section("Saved Addresses",
@@ -791,7 +875,7 @@ class CabbyAgent(AgentBase):
                 }
             })
             agent.prompt_add_section("New Caller",
-                "This is a new caller. Welcome them to Cabby and ask for their name "
+                f"This is a new caller from {caller_phone}. Welcome them to Cabby and ask for their name "
                 "so you can register them with register_customer before booking a ride."
             )
 

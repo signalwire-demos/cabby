@@ -47,7 +47,8 @@ class CabbyAgent(AgentBase):
         # Hard rules for voice behavior and tool discipline
         self.prompt_add_section("Rules", body="", bullets=[
             "This is a PHONE CALL. Keep every response to 1-2 short sentences. Never give long lists of options.",
-            "Ask ONE question at a time. Wait for the caller to answer before moving on.",
+            "Ask ONE question at a time. Let the caller answer before moving on.",
+            "Never include meta-instructions, stage directions, or parenthetical notes like '(awaiting response)' in your speech. Only say words the caller should hear.",
             "NEVER make up or guess addresses, fares, distances, or trip details. You MUST call the tools to get this information.",
             "NEVER skip calling a tool. You cannot validate an address without calling validate_address. You cannot get a fare without calling calculate_fare.",
             "ONLY reference data you can actually see in the prompt sections above. If there is no Recent Trips section, do NOT offer rebook or reverse. If there is no Pending Trip section, do NOT mention pending trips.",
@@ -84,10 +85,10 @@ class CabbyAgent(AgentBase):
         greeting.add_bullets("Process", [
             "Introduce yourself: 'Hi, I'm Cabby, your AI taxi dispatcher!'",
             "Check is_new_caller: ${global_data.is_new_caller}",
-            "NEW CALLER (is_new_caller is true): Ask 'What's your name?' and WAIT for the caller to respond. Only after the caller tells you their name, call register_customer with the name they said.",
+            "NEW CALLER (is_new_caller is true): Ask 'What's your name?' and let them answer. Only call register_customer after the caller has told you their name.",
             "RETURNING CALLER (is_new_caller is false): Greet them by name, then ask what they need",
-            "If you can see a Pending Trip section above: mention their pending ride and ask if they want to keep or cancel it",
-            "If you can see a Recent Trips section above: offer to rebook or reverse their last trip",
+            "If you can see a Pending Trip section above: just say 'I see you have a pending ride' and ask if they'd like to keep it or cancel — do NOT read out the addresses or fare",
+            "If you can see a Recent Trips section above: just ask if they'd like to rebook or reverse their last trip — do NOT read out the addresses",
             "Based on what the caller wants:",
             "  REBOOK or REVERSE: move to get_pickup",
             "  CANCEL: move to cancel_confirm",
@@ -97,6 +98,7 @@ class CabbyAgent(AgentBase):
         greeting.add_bullets("Do NOT", [
             "Do NOT offer rebook or reverse if there is no Recent Trips section above",
             "Do NOT mention pending trips if there is no Pending Trip section above",
+            "Do NOT read out addresses, fares, or trip details in the greeting — just acknowledge the ride exists and ask what they want to do",
             "Do NOT ask for addresses here — get_pickup handles that",
             "Do NOT call register_customer until the caller has actually said their name",
             "Do NOT list every option — just ask what they need",
@@ -256,6 +258,15 @@ class CabbyAgent(AgentBase):
         )
         def register_customer(args, raw_data):
             global_data = raw_data.get('global_data', {})
+
+            # Already registered — don't re-register
+            if global_data.get('customer'):
+                customer_name = global_data['customer'].get('name', 'caller')
+                return SwaigFunctionResult(
+                    f"{customer_name} is already registered. Ask what they need — "
+                    "a new ride, rebook, reverse, cancel, or update an address."
+                )
+
             caller_phone = global_data.get('caller_phone', '')
             name = args.get("name", "").strip()
 
@@ -281,15 +292,14 @@ class CabbyAgent(AgentBase):
                 "id": customer["id"],
                 "name": customer["name"],
                 "phone": caller_phone,
-                "home_address": None,
-                "home_lat": None,
-                "home_lng": None,
-                "work_address": None,
-                "work_lat": None,
-                "work_lng": None,
+                "home_address": customer.get("home_address"),
+                "home_lat": customer.get("home_lat"),
+                "home_lng": customer.get("home_lng"),
+                "work_address": customer.get("work_address"),
+                "work_lat": customer.get("work_lat"),
+                "work_lng": customer.get("work_lng"),
             }
             global_data['is_new_caller'] = False
-            # Promote to customer_phone so post-prompt summary can find it
             global_data['customer_phone'] = caller_phone
             global_data.pop('caller_phone', None)
 
@@ -881,6 +891,24 @@ class CabbyAgent(AgentBase):
 
             agent.set_global_data(gdata)
 
+            # Remove register_customer from greeting — caller is already known.
+            # _contexts_builder is shared (not deep-copied), so we serialize it
+            # to a mutable dict, patch it, and replace the builder on this copy.
+            if agent._contexts_builder:
+                patched = agent._contexts_builder.to_dict()
+                for ctx in patched.values():
+                    for step in ctx.get("steps", []):
+                        if step.get("name") == "greeting" and isinstance(step.get("functions"), list):
+                            step["functions"] = [f for f in step["functions"] if f != "register_customer"]
+                            break
+
+                class _PatchedContexts:
+                    """Thin wrapper so _render_swml can call .to_dict()."""
+                    def __init__(self, d): self._d = d
+                    def to_dict(self): return self._d
+
+                agent._contexts_builder = _PatchedContexts(patched)
+
             # Agent-level sections visible across ALL steps.
             agent.prompt_add_section("Caller",
                 f"This is a returning customer named {customer['name']} "
@@ -912,7 +940,7 @@ class CabbyAgent(AgentBase):
             })
             agent.prompt_add_section("New Caller",
                 f"This is a new caller from {caller_phone}. Welcome them to Cabby and ask for their name. "
-                "WAIT for the caller to say their name before calling register_customer."
+                "Only call register_customer after the caller tells you their name."
             )
 
     def _render_swml(self, call_id=None, modifications=None):

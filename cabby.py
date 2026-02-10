@@ -12,7 +12,7 @@ from signalwire_agents.core.function_result import SwaigFunctionResult
 
 import config
 from database import Database
-from google_api import GoogleMapsClient
+from signalwire_agents.skills.google_maps.skill import GoogleMapsClient
 
 load_dotenv()
 

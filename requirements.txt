@@ -1,4 +1,4 @@
-signalwire-agents==1.0.18.dev16
+signalwire-agents==1.0.18.dev17
 requests>=2.31.0
 python-dotenv>=1.0.0
 gunicorn>=21.0.0

@@ -891,23 +891,9 @@ class CabbyAgent(AgentBase):
 
             agent.set_global_data(gdata)
 
-            # Remove register_customer from greeting — caller is already known.
-            # _contexts_builder is shared (not deep-copied), so we serialize it
-            # to a mutable dict, patch it, and replace the builder on this copy.
-            if agent._contexts_builder:
-                patched = agent._contexts_builder.to_dict()
-                for ctx in patched.values():
-                    for step in ctx.get("steps", []):
-                        if step.get("name") == "greeting" and isinstance(step.get("functions"), list):
-                            step["functions"] = [f for f in step["functions"] if f != "register_customer"]
-                            break
-
-                class _PatchedContexts:
-                    """Thin wrapper so _render_swml can call .to_dict()."""
-                    def __init__(self, d): self._d = d
-                    def to_dict(self): return self._d
-
-                agent._contexts_builder = _PatchedContexts(patched)
+            # Remove register_customer from greeting — caller is already known
+            greeting_step = agent._contexts_builder.get_context("default").get_step("greeting")
+            greeting_step.set_functions(["save_address", "cancel_booking"])
 
             # Agent-level sections visible across ALL steps.
             agent.prompt_add_section("Caller",

@@ -44,16 +44,14 @@ class CabbyAgent(AgentBase):
             "and cancel bookings. You are warm, concise, and professional."
         )
 
-        # Hard rules for voice behavior and tool discipline
+        # Voice behavior — semantic constraints for conversational quality
         self.prompt_add_section("Rules", body="", bullets=[
-            "This is a PHONE CALL. Keep every response to 1-2 short sentences. Never give long lists of options.",
+            "This is a PHONE CALL. Keep every response to 1-2 short sentences.",
             "Ask ONE question at a time. Let the caller answer before moving on.",
-            "Never include meta-instructions, stage directions, or parenthetical notes like '(awaiting response)' in your speech. Only say words the caller should hear.",
-            "NEVER make up or guess addresses, fares, distances, or trip details. You MUST call the tools to get this information.",
-            "NEVER skip calling a tool. You cannot validate an address without calling validate_address. You cannot get a fare without calling calculate_fare.",
-            "ONLY reference data you can actually see in the prompt sections above. If there is no Recent Trips section, do NOT offer rebook or reverse. If there is no Pending Trip section, do NOT mention pending trips.",
-            "Each step has ONE job. Do that job and nothing else. Do NOT ask about the destination during pickup. Do NOT discuss fares during address collection.",
-            "You ONLY help with booking, rebooking, reversing, or cancelling taxi rides and managing saved addresses. If the caller asks about anything else — trivia, general knowledge, chitchat, or questions unrelated to their ride — politely redirect: 'I can only help with taxi bookings. Would you like to book a ride?'",
+            "Only say words the caller should hear. No meta-instructions, stage directions, or parenthetical notes.",
+            "All data comes from the tools. Never fabricate addresses, fares, or trip details.",
+            "Only reference data you can actually see in the prompt sections above. If there is no Recent Trips section, do not offer rebook or reverse. If there is no Pending Trip section, do not mention pending trips.",
+            "You only help with taxi bookings, rebooking, reversing, cancelling, and managing saved addresses. Politely redirect anything else.",
         ])
 
         # Voice
@@ -79,32 +77,10 @@ class CabbyAgent(AgentBase):
         contexts = self.define_contexts()
         ctx = contexts.add_context("default")
 
-        # GREETING
+        # GREETING — bare shell; _per_call_config sets Process/criteria per caller type
         greeting = ctx.add_step("greeting")
-        greeting.add_section("Task", "Introduce yourself as Cabby and determine what the caller needs")
-        greeting.add_bullets("Process", [
-            "Introduce yourself: 'Hi, I'm Cabby, your AI taxi dispatcher!'",
-            "Check is_new_caller: ${global_data.is_new_caller}",
-            "NEW CALLER (is_new_caller is true): Ask 'What's your name?' and let them answer. Only call register_customer after the caller has told you their name.",
-            "RETURNING CALLER (is_new_caller is false): Greet them by name, then ask what they need",
-            "If you can see a Pending Trip section above: just say 'I see you have a pending ride' and ask if they'd like to keep it or cancel — do NOT read out the addresses or fare",
-            "If you can see a Recent Trips section above: just ask if they'd like to rebook or reverse their last trip — do NOT read out the addresses",
-            "Based on what the caller wants:",
-            "  REBOOK or REVERSE: move to get_pickup",
-            "  CANCEL: move to cancel_confirm",
-            "  NEW RIDE: move to get_pickup",
-            "  UPDATE ADDRESS: move to update_address",
-        ])
-        greeting.add_bullets("Do NOT", [
-            "Do NOT offer rebook or reverse if there is no Recent Trips section above",
-            "Do NOT mention pending trips if there is no Pending Trip section above",
-            "Do NOT read out addresses, fares, or trip details in the greeting — just acknowledge the ride exists and ask what they want to do",
-            "Do NOT ask for addresses here — get_pickup handles that",
-            "Do NOT call register_customer until the caller has actually said their name",
-            "Do NOT list every option — just ask what they need",
-        ])
-        greeting.set_step_criteria("Caller's intent is determined")
-        greeting.set_functions(["register_customer", "save_address", "cancel_booking"])
+        greeting.add_section("Task", "Welcome the caller")
+        greeting.set_functions("none")
         greeting.set_valid_steps(["get_pickup", "cancel_confirm", "update_address", "wrap_up"])
 
         # GET PICKUP
@@ -120,12 +96,10 @@ class CabbyAgent(AgentBase):
             "If they say yes: move to get_destination",
             "If they say no: ask for the correct address and call validate_address again",
         ])
-        get_pickup.add_bullets("Do NOT", [
-            "Do NOT ask about the destination — that is the next step",
-            "Do NOT skip calling validate_address — every address must be validated",
-            "Do NOT move to get_destination until the caller confirms the pickup address",
+        get_pickup.add_bullets("Important", [
+            "Do not move on until the caller confirms the pickup address is correct",
         ])
-        get_pickup.set_step_criteria("Pickup address validated and stored in booking_state")
+        get_pickup.set_step_criteria("Pickup address validated and confirmed by caller")
         get_pickup.set_functions(["validate_address"])
         get_pickup.set_valid_steps(["get_destination"])
 
@@ -142,12 +116,10 @@ class CabbyAgent(AgentBase):
             "If they say yes: move to confirm_fare",
             "If they say no: ask for the correct address and call validate_address again",
         ])
-        get_destination.add_bullets("Do NOT", [
-            "Do NOT discuss fares or booking — that is the next step",
-            "Do NOT skip calling validate_address — every address must be validated",
-            "Do NOT move to confirm_fare until the caller confirms the destination address",
+        get_destination.add_bullets("Important", [
+            "Do not move on until the caller confirms the destination address is correct",
         ])
-        get_destination.set_step_criteria("Destination address validated and stored in booking_state")
+        get_destination.set_step_criteria("Destination address validated and confirmed by caller")
         get_destination.set_functions(["validate_address"])
         get_destination.set_valid_steps(["confirm_fare"])
 
@@ -160,9 +132,8 @@ class CabbyAgent(AgentBase):
             "If yes: call confirm_booking (no parameters needed)",
             "If no: ask what they want to change, then move to get_pickup or get_destination",
         ])
-        confirm_fare.add_bullets("Do NOT", [
-            "Do NOT make up a fare — you MUST call calculate_fare to get the real number",
-            "Do NOT call confirm_booking until the caller says yes",
+        confirm_fare.add_bullets("Important", [
+            "Do not confirm the booking until the caller explicitly agrees",
         ])
         confirm_fare.set_step_criteria("Caller confirms or declines the booking")
         confirm_fare.set_functions(["calculate_fare", "confirm_booking"])
@@ -224,6 +195,11 @@ class CabbyAgent(AgentBase):
         """Define all SWAIG tool functions."""
 
         # Helper functions
+        def _change_step(result, step):
+            """Log and apply a forced step change."""
+            logger.info(f"step_change: -> {step}")
+            result.swml_change_step(step)
+
         def get_booking_state(raw_data):
             """Get current booking state from global_data."""
             global_data = raw_data.get('global_data', {})
@@ -232,13 +208,11 @@ class CabbyAgent(AgentBase):
                 "destination": None,
                 "route": None
             }
-            return global_data.get('booking_state', default), global_data
+            return global_data.get('booking_state', default)
 
-        def save_booking_state(result, booking_state, global_data):
-            """Save booking state back to global_data."""
-            global_data['booking_state'] = booking_state
-            result.update_global_data(global_data)
-            return result
+        def save_booking_state(result, booking_state):
+            """Save booking state back to global_data — only sends this key."""
+            result.update_global_data({"booking_state": booking_state})
 
         # 1. REGISTER CUSTOMER
         @self.tool(
@@ -288,7 +262,7 @@ class CabbyAgent(AgentBase):
                     "and call register_customer once more."
                 )
 
-            global_data['customer'] = {
+            customer_data = {
                 "id": customer["id"],
                 "name": customer["name"],
                 "phone": caller_phone,
@@ -299,13 +273,14 @@ class CabbyAgent(AgentBase):
                 "work_lat": customer.get("work_lat"),
                 "work_lng": customer.get("work_lng"),
             }
-            global_data['is_new_caller'] = False
-            global_data['customer_phone'] = caller_phone
-            global_data.pop('caller_phone', None)
 
             result = SwaigFunctionResult(f"Welcome to Cabby, {name}! You're all registered. Now let's book you a ride.")
-            result.update_global_data(global_data)
-            result.swml_change_step("get_pickup")
+            result.update_global_data({
+                "customer": customer_data,
+                "is_new_caller": False,
+                "customer_phone": caller_phone,
+            })
+            _change_step(result, "get_pickup")
             return result
 
         # 2. VALIDATE ADDRESS
@@ -340,7 +315,7 @@ class CabbyAgent(AgentBase):
             bias_lat = None
             bias_lng = None
             if address_type == "destination":
-                booking_state_peek, _ = get_booking_state(raw_data)
+                booking_state_peek = get_booking_state(raw_data)
                 pickup = booking_state_peek.get("pickup")
                 if pickup:
                     bias_lat = pickup.get("lat")
@@ -376,19 +351,21 @@ class CabbyAgent(AgentBase):
 
             if address_type == "update":
                 # Store validated address in global_data for save_address to use
-                global_data['validated_address'] = {
-                    "address": address,
-                    "lat": validated["lat"],
-                    "lng": validated["lng"]
-                }
                 result = SwaigFunctionResult(
                     f"The address is {address}. "
                     f"Please confirm with the caller, then call save_address with the address_type."
                 )
-                result.update_global_data(global_data)
+                result.update_global_data({
+                    "validated_address": {
+                        "address": address,
+                        "lat": validated["lat"],
+                        "lng": validated["lng"]
+                    }
+                })
+                result.add_dynamic_hints([address])
                 return result
 
-            booking_state, global_data = get_booking_state(raw_data)
+            booking_state = get_booking_state(raw_data)
             booking_state[address_type] = {
                 "address": address,
                 "lat": validated["lat"],
@@ -413,7 +390,8 @@ class CabbyAgent(AgentBase):
                     f"The {address_type} address is {address}. "
                     f"Read this back to the caller and confirm it's correct before continuing."
                 )
-            save_booking_state(result, booking_state, global_data)
+            save_booking_state(result, booking_state)
+            result.add_dynamic_hints([address])
 
             # No forced step transition — AI confirms address with caller first,
             # then moves to next step naturally via valid_steps
@@ -423,8 +401,8 @@ class CabbyAgent(AgentBase):
         # 3. CALCULATE FARE
         @self.tool(
             name="calculate_fare",
-            description="Calculate the fare estimate using the pickup and destination already stored in booking_state. "
-                        "No parameters needed — coordinates come from validate_address.",
+            description="Calculate the fare estimate for the current trip. "
+                        "No parameters needed — uses the pickup and destination already collected by validate_address.",
             fillers={"en-US": ["Let me calculate that fare.", "Checking the route and fare.", "One moment while I figure that out."]},
             parameters={
                 "type": "object",
@@ -433,7 +411,7 @@ class CabbyAgent(AgentBase):
             }
         )
         def calculate_fare(args, raw_data):
-            booking_state, global_data = get_booking_state(raw_data)
+            booking_state = get_booking_state(raw_data)
             pickup = booking_state.get("pickup")
             destination = booking_state.get("destination")
 
@@ -487,14 +465,14 @@ class CabbyAgent(AgentBase):
                 f"The estimated fare is ${fare:.2f} for a {distance_miles:.1f} mile trip, "
                 f"about {int(duration_min)} minutes. Would you like to confirm this booking?"
             )
-            save_booking_state(result, booking_state, global_data)
+            save_booking_state(result, booking_state)
             return result
 
         # 4. CONFIRM BOOKING
         @self.tool(
             name="confirm_booking",
             description="Confirm and create the trip booking. Sends an SMS confirmation to the caller. "
-                        "No parameters needed — all trip data comes from booking_state.",
+                        "No parameters needed — uses the addresses and fare already collected.",
             fillers={"en-US": ["Booking your ride now.", "Let me confirm that for you.", "One moment while I finalize your booking."]},
             parameters={
                 "type": "object",
@@ -510,7 +488,7 @@ class CabbyAgent(AgentBase):
                 return SwaigFunctionResult("I need to register you first before booking a trip.")
 
             # Use booking_state addresses (has labels from validate_address) over AI args
-            booking_state, _ = get_booking_state(raw_data)
+            booking_state = get_booking_state(raw_data)
             bs_pickup = booking_state.get("pickup") or {}
             bs_dest = booking_state.get("destination") or {}
             bs_route = booking_state.get("route") or {}
@@ -591,7 +569,7 @@ class CabbyAgent(AgentBase):
                 "status": "pending",
                 "created_at": trip.get("created_at", "")
             }
-            global_data['pending_trip'] = {
+            pending_trip_data = {
                 "id": trip["id"],
                 "pickup_address": pickup_display,
                 "destination_address": dest_display,
@@ -600,17 +578,18 @@ class CabbyAgent(AgentBase):
             # Add to recent_trips so rebook data is available if caller books again
             recent = global_data.get('recent_trips', [])
             recent.insert(0, new_trip)
-            global_data['recent_trips'] = recent[:5]
-            # Only reset booking state if we're not offering to save an address
-            result.update_global_data(global_data)
+            result.update_global_data({
+                "pending_trip": pending_trip_data,
+                "recent_trips": recent[:5],
+            })
 
             # Offer to save address if home or work is missing, otherwise end call
             has_home = bool(customer.get("home_address"))
             has_work = bool(customer.get("work_address"))
             if has_home and has_work:
-                result.swml_change_step("wrap_up")
+                _change_step(result, "wrap_up")
             else:
-                result.swml_change_step("offer_save_address")
+                _change_step(result, "offer_save_address")
 
             return result
 
@@ -635,10 +614,9 @@ class CabbyAgent(AgentBase):
             trip_id = pending["id"]
             db.cancel_trip(trip_id)
 
-            global_data.pop('pending_trip', None)
-
             # Update status in recent_trips so it doesn't show as pending
-            for t in global_data.get('recent_trips', []):
+            recent = global_data.get('recent_trips', [])
+            for t in recent:
                 if t.get("id") == trip_id:
                     t["status"] = "cancelled"
                     break
@@ -664,8 +642,11 @@ class CabbyAgent(AgentBase):
                 from_number=config.SIGNALWIRE_PHONE_NUMBER,
                 body=sms_body
             )
-            result.update_global_data(global_data)
-            result.swml_change_step("greeting")
+            result.update_global_data({
+                "pending_trip": None,
+                "recent_trips": recent,
+            })
+            _change_step(result, "greeting")
             return result
 
         # 6. SAVE ADDRESS
@@ -715,23 +696,23 @@ class CabbyAgent(AgentBase):
 
             db.update_customer_address(customer["id"], address_type, address, lat, lng)
 
-            # Update global_data so it's immediately available
+            # Update customer so it's immediately available
             customer[f"{address_type}_address"] = address
             customer[f"{address_type}_lat"] = lat
             customer[f"{address_type}_lng"] = lng
-            global_data['customer'] = customer
-            # Clean up stashed validated address
-            global_data.pop('validated_address', None)
 
             result = SwaigFunctionResult(
                 f"Saved {address} as your {address_type} address."
             )
-            result.update_global_data(global_data)
+            result.update_global_data({
+                "customer": customer,
+                "validated_address": None,
+            })
             # Update flow → back to greeting; booking flow → end the call
             if from_update:
-                result.swml_change_step("greeting")
+                _change_step(result, "greeting")
             else:
-                result.swml_change_step("wrap_up")
+                _change_step(result, "wrap_up")
             return result
 
         # 7. SUMMARIZE CONVERSATION (special name — auto-triggers SUMMARY_FUNCTION mode)
@@ -834,6 +815,8 @@ class CabbyAgent(AgentBase):
         caller_phone = call_data.get("from", "")
 
         customer = db.get_customer_by_phone(caller_phone)
+        ctx = agent._contexts_builder.get_context("default")
+        greeting_step = ctx.get_step("greeting")
 
         if customer:
             # RETURNING CALLER
@@ -889,11 +872,33 @@ class CabbyAgent(AgentBase):
                     "fare_estimate": pending_trip["fare_estimate"],
                 }
 
-            agent.set_global_data(gdata)
+            agent.update_global_data(gdata)
 
-            # Remove register_customer from greeting — caller is already known
-            greeting_step = agent._contexts_builder.get_context("default").get_step("greeting")
+            # Greeting: greet by name, determine intent — no conditional prompt logic
             greeting_step.set_functions(["save_address", "cancel_booking"])
+            greeting_step.set_valid_steps(["get_pickup", "cancel_confirm", "update_address", "wrap_up"])
+            process_bullets = [
+                f"Greet the caller: 'Welcome back, {customer['name']}!'",
+            ]
+            if pending_trip:
+                process_bullets.append(
+                    "Say 'I see you have a pending ride' and ask if they'd like to keep it or cancel"
+                )
+            if recent_trips:
+                process_bullets.append(
+                    "Ask if they'd like to rebook or reverse their last trip, or start a new one"
+                )
+            process_bullets.extend([
+                "Based on what the caller wants:",
+                "  REBOOK or REVERSE or NEW RIDE: move to get_pickup",
+                "  CANCEL: move to cancel_confirm",
+                "  UPDATE ADDRESS: move to update_address",
+            ])
+            greeting_step.add_bullets("Process", process_bullets)
+            greeting_step.add_bullets("Important", [
+                "Do not read out addresses or fares — just acknowledge and ask what they need",
+            ])
+            greeting_step.set_step_criteria("Caller's intent is determined")
 
             # Agent-level sections visible across ALL steps.
             agent.prompt_add_section("Caller",
@@ -914,7 +919,7 @@ class CabbyAgent(AgentBase):
 
         else:
             # NEW CALLER — only set what's needed, no empty placeholders
-            agent.set_global_data({
+            agent.update_global_data({
                 "customer": None,
                 "is_new_caller": True,
                 "caller_phone": caller_phone,
@@ -924,6 +929,17 @@ class CabbyAgent(AgentBase):
                     "route": None
                 }
             })
+
+            # Greeting: welcome + register
+            greeting_step.set_functions(["register_customer"])
+            greeting_step.set_valid_steps(["get_pickup"])
+            greeting_step.add_bullets("Process", [
+                "Introduce yourself: 'Hi, I'm Cabby, your AI taxi dispatcher!'",
+                "Ask 'What's your name?' and wait for them to answer",
+                "Call register_customer with their name",
+            ])
+            greeting_step.set_step_criteria("Caller registered via register_customer")
+
             agent.prompt_add_section("New Caller",
                 f"This is a new caller from {caller_phone}. Welcome them to Cabby and ask for their name. "
                 "Only call register_customer after the caller tells you their name."

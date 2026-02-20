@@ -244,6 +244,7 @@ class CabbyAgent(AgentBase):
         @self.tool(
             name="register_customer",
             description="Register a new caller as a customer. Use when a new caller provides their name.",
+            wait_file="/sounds/typing.mp3",
             fillers={"en-US": ["Let me get you registered.", "One moment while I set up your account."]},
             parameters={
                 "type": "object",
@@ -314,6 +315,7 @@ class CabbyAgent(AgentBase):
             description="Validate and geocode a street address or business name. "
                         "For destinations, the search is automatically biased toward the pickup area "
                         "so short queries like 'Walmart' find the nearest match.",
+            wait_file="/sounds/typing.mp3",
             fillers={"en-US": ["Let me look that up.", "Checking that address.", "One moment."]},
             parameters={
                 "type": "object",
@@ -425,6 +427,7 @@ class CabbyAgent(AgentBase):
             name="calculate_fare",
             description="Calculate the fare estimate using the pickup and destination already stored in booking_state. "
                         "No parameters needed — coordinates come from validate_address.",
+            wait_file="/sounds/typing.mp3",
             fillers={"en-US": ["Let me calculate that fare.", "Checking the route and fare.", "One moment while I figure that out."]},
             parameters={
                 "type": "object",
@@ -495,6 +498,7 @@ class CabbyAgent(AgentBase):
             name="confirm_booking",
             description="Confirm and create the trip booking. Sends an SMS confirmation to the caller. "
                         "No parameters needed — all trip data comes from booking_state.",
+            wait_file="/sounds/typing.mp3",
             fillers={"en-US": ["Booking your ride now.", "Let me confirm that for you.", "One moment while I finalize your booking."]},
             parameters={
                 "type": "object",
@@ -618,6 +622,7 @@ class CabbyAgent(AgentBase):
         @self.tool(
             name="cancel_booking",
             description="Cancel the current pending trip booking.",
+            wait_file="/sounds/typing.mp3",
             fillers={"en-US": ["Let me cancel that for you.", "One moment while I process the cancellation."]},
             parameters={
                 "type": "object",
@@ -672,6 +677,7 @@ class CabbyAgent(AgentBase):
         @self.tool(
             name="save_address",
             description="Save an address as the caller's home or work address for quick future bookings.",
+            wait_file="/sounds/typing.mp3",
             fillers={"en-US": ["Saving that address.", "Let me save that for you."]},
             parameters={
                 "type": "object",
@@ -831,7 +837,7 @@ class CabbyAgent(AgentBase):
         leak into the shared instance or other concurrent calls.
         """
         call_data = (body_params or {}).get("call", {})
-        caller_phone = call_data.get("from", "")
+        caller_phone = call_data.get("caller_id_number", "")
 
         customer = db.get_customer_by_phone(caller_phone)
 

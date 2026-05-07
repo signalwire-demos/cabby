@@ -27,7 +27,7 @@ MINIMUM_FARE = float(os.getenv("MINIMUM_FARE", "8.00"))
 MAX_DISTANCE_MILES = float(os.getenv("MAX_DISTANCE_MILES", "100"))
 
 # AI Model
-AI_MODEL = os.getenv("AI_MODEL", "gpt-oss-120b")
+AI_MODEL = os.getenv("AI_MODEL", "4o-mini")
 AI_TOP_P = float(os.getenv("AI_TOP_P", "0.5"))
 AI_TEMPERATURE = float(os.getenv("AI_TEMPERATURE", "0.5"))
 

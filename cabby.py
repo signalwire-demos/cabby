@@ -7,12 +7,12 @@ import json
 import logging
 from pathlib import Path
 from dotenv import load_dotenv
-from signalwire_agents import AgentBase, AgentServer
-from signalwire_agents.core.function_result import SwaigFunctionResult
+from signalwire import AgentBase, AgentServer
+from signalwire.core.function_result import SwaigFunctionResult
 
 import config
 from database import Database
-from signalwire_agents.skills.google_maps.skill import GoogleMapsClient
+from signalwire.skills.google_maps.skill import GoogleMapsClient
 
 load_dotenv()
 
